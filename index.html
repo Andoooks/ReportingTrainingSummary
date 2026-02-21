@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Report Training Summary | All Shifts</title>
+    <title>Report Training Summary | Ares-60</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-slate-50 min-h-screen">
+<body class="bg-slate-50 min-h-screen flex flex-col">
 
     <div id="shiftOverlay" class="fixed inset-0 bg-slate-900 flex items-center justify-center z-[100]">
         <div class="bg-white p-10 rounded-3xl shadow-2xl max-w-md w-full text-center">
@@ -26,7 +26,7 @@
         <div class="flex items-center gap-4">
             <div>
                 <h1 class="text-xl font-bold uppercase tracking-wider">Report Training Summary</h1>
-                <p id="activeShiftDisplay" class="text-blue-400 text-xs font-mono font-bold"></p>
+                <p id="activeShiftDisplay" class="text-blue-400 text-xs font-mono font-bold uppercase"></p>
             </div>
             <button id="changeShiftBtn" class="text-slate-400 hover:text-white text-xs underline underline-offset-4 ml-2">
                 Change Shift
@@ -38,18 +38,15 @@
         </div>
     </nav>
 
-    <main class="p-4 h-[calc(100vh-100px)]">
+    <main class="flex-grow p-4 flex flex-col h-[calc(100vh-100px)]">
         <input type="file" id="csvFiles" accept=".csv" multiple class="hidden" />
         
-        <div id="dropzone" class="w-full h-full border-4 border-dashed border-slate-200 rounded-3xl flex flex-col items-center justify-center cursor-pointer hover:bg-white transition group">
-            <div class="bg-blue-50 p-6 rounded-full mb-4 group-hover:scale-110 transition shadow-inner text-blue-500">
-                <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4" stroke-width="2.5" stroke-linecap="round"/></svg>
-            </div>
-            <p class="text-2xl font-bold text-slate-400">Upload CSVs for <span id="dropzoneShiftText">Shift</span></p>
+        <div id="dropzone" class="flex-grow border-4 border-dashed border-slate-200 rounded-3xl flex flex-col items-center justify-center cursor-pointer hover:bg-white transition-all group">
+            <p class="text-3xl font-bold text-slate-400 uppercase">Upload CSVs for <span id="dropzoneShiftText">Shift</span></p>
         </div>
 
-        <div id="previewArea" class="hidden h-full">
-            <iframe id="pdfFrame" class="w-full h-full rounded-2xl border-2 border-slate-200 bg-slate-100 shadow-inner"></iframe>
+        <div id="previewArea" class="hidden flex-grow flex flex-col h-full">
+            <iframe id="pdfFrame" class="w-full h-full rounded-2xl border-2 border-slate-200 bg-white shadow-2xl"></iframe>
         </div>
     </main>
 
@@ -57,17 +54,10 @@
         const { jsPDF } = window.jspdf;
         let finalBlob = null;
         let sessions = [];
-        let globalCycleCount = {};
+        let operatorCycleMap = {}; 
         let shiftNumber = "";
 
-        // Reset and go to Landing Page
-        document.getElementById('changeShiftBtn').onclick = () => {
-            if (confirm("Reset current data and change shift?")) {
-                location.reload();
-            }
-        };
-
-        // Shift validation (1-6)
+        // UI Logic
         document.getElementById('startBtn').onclick = () => {
             const val = parseInt(document.getElementById('shiftInput').value);
             if (val >= 1 && val <= 6) {
@@ -76,11 +66,14 @@
                 document.getElementById('activeShiftDisplay').innerText = `SHIFT ${shiftNumber} ACTIVE`;
                 document.getElementById('dropzoneShiftText').innerText = `Shift ${shiftNumber}`;
             } else {
-                alert("Invalid Entry. Please enter a shift number between 1 and 6.");
+                alert("Please enter a valid shift number between 1 and 6.");
             }
         };
 
-        // File Processing
+        document.getElementById('changeShiftBtn').onclick = () => {
+            if (confirm("Reset and return to entry?")) location.reload();
+        };
+
         document.getElementById('addBtn').onclick = () => document.getElementById('csvFiles').click();
         document.getElementById('dropzone').onclick = () => document.getElementById('csvFiles').click();
 
@@ -99,15 +92,16 @@
             const margin = 5; 
             const colGap = 5;
             const colWidth = (pageWidth - (margin * 2) - colGap) / 2;
-            globalCycleCount = {}; 
+            operatorCycleMap = {}; 
 
             sessions.forEach((session, sIdx) => {
                 if (sIdx > 0) doc.addPage();
                 
-                doc.setFillColor(31, 41, 55);
-                doc.rect(0, 0, 210, 15, 'F');
-                doc.setTextColor(255, 255, 255);
-                doc.setFontSize(10).text(`SHIFT ${shiftNumber} REPORT | SOURCE: ${session.name.toUpperCase()}`, margin, 10);
+                // 1. Centered Bold Header from your image
+                doc.setFont("helvetica", "bold");
+                doc.setFontSize(22);
+                doc.setTextColor(0, 0, 0);
+                doc.text(`Shift ${shiftNumber} Training Summary`, pageWidth / 2, 20, { align: "center" });
 
                 let startX = margin;
                 ['left', 'right'].forEach(side => {
@@ -115,13 +109,15 @@
                     if (sideData.length === 0) return;
 
                     const opName = (sideData[0].Operator || "Unknown").trim();
-                    globalCycleCount[opName] = (globalCycleCount[opName] || 0) + 1;
-                    const cycleNo = globalCycleCount[opName];
+                    operatorCycleMap[opName] = (operatorCycleMap[opName] || 0) + 1;
+                    const cycleNo = operatorCycleMap[opName];
 
+                    // Calculations
                     const startTs = sideData[0]['Timestamp (ISO)'];
                     const endTs = sideData[sideData.length-1]['Timestamp (ISO)'];
                     const durationMs = new Date(endTs) - new Date(startTs);
-                    const rateH = (sideData.length / (durationMs / 3600000)).toFixed(2);
+                    const rateH = (sideData.length / (durationMs / 3600000)).toFixed(12);
+                    const rateD = (rateH * 24).toFixed(12);
                     
                     const intervals = [];
                     for(let i=1; i<sideData.length; i++){
@@ -129,27 +125,33 @@
                     }
                     const sorted = [...intervals].sort((a,b) => a-b);
                     const meanG = intervals.length > 0 ? (intervals.reduce((a,b)=>a+b,0)/intervals.length) : 0;
+                    const medianG = sorted[Math.floor(sorted.length / 2)] || 0;
 
-                    doc.setTextColor(17, 24, 39);
-                    doc.setFontSize(14).setFont(undefined, 'bold').text(`${side.toUpperCase()} - CYCLE ${cycleNo}`, startX, 25);
+                    // Header for Side
+                    doc.setTextColor(31, 41, 55);
+                    doc.setFontSize(14).text(`${side.toUpperCase()} - CYCLE ${cycleNo}`, startX, 32);
 
+                    // 2. Maximized Table with restored modern design
                     doc.autoTable({
-                        startY: 28,
+                        startY: 35,
                         margin: { left: startX },
                         tableWidth: colWidth,
                         body: [
+                            ["Cycle No.", cycleNo.toString()],
+                            ["Side", side.toLowerCase()],
                             ["Operator", opName],
-                            ["Cycle Number", cycleNo.toString()],
-                            ["Total Completions", sideData.length.toString()],
+                            ["Start Timestamp", startTs.replace('T', ' ').replace('Z', '')],
+                            ["End Timestamp", endTs.replace('T', ' ').replace('Z', '')],
                             ["Duration", fmt(durationMs)],
                             ["Rate Per Hour", rateH],
+                            ["Rate Per Day", rateD],
                             ["Mean Gap", fmt(meanG)],
-                            ["Min Gap", fmt(sorted[0])],
-                            ["Max Gap", fmt(sorted[sorted.length-1])]
+                            ["Median Gap", fmt(medianG)],
+                            ["Total Step Completions", sideData.length.toString()]
                         ],
-                        theme: 'grid',
-                        styles: { fontSize: 10, cellPadding: 3.5 },
-                        columnStyles: { 0: { fontStyle: 'bold', fillColor: [248, 250, 252], width: 40 } }
+                        theme: 'grid', // Restored grid for better readability
+                        styles: { fontSize: 9.5, cellPadding: 3 },
+                        columnStyles: { 0: { fontStyle: 'bold', fillColor: [241, 245, 249], width: 40 } }
                     });
                     startX += colWidth + colGap;
                 });
@@ -163,15 +165,14 @@
         }
 
         function fmt(ms) {
-            if (!ms || isNaN(ms)) return "0s";
+            if (!ms || isNaN(ms)) return "00m 00s";
             const s = Math.floor(ms / 1000);
             return `${Math.floor(s/60)}m ${s%60}s`;
         }
 
         document.getElementById('dlBtn').onclick = () => {
-            const dateStr = new Date().toLocaleDateString('en-US', {
-                year: 'numeric', month: '2-digit', day: '2-digit'
-            }).replace(/\//g, '-');
+            const today = new Date();
+            const dateStr = today.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }).replace(/\//g, '-');
             const link = document.createElement('a');
             link.href = URL.createObjectURL(finalBlob);
             link.download = `Shift ${shiftNumber} Summary - ${dateStr}.pdf`;
