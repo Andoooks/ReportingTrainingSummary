@@ -190,7 +190,7 @@
             sessions.forEach((session, idx) => {
                 if (idx > 0) doc.addPage();
                 doc.setFont("helvetica", "bold").setFontSize(22).setTextColor(0,0,0);
-                doc.text(`ShiFt ${shiftNumber} Training Summary`, pW / 2, 20, { align: "center" });
+                doc.text(`Shift ${shiftNumber} Training Summary`, pW / 2, 20, { align: "center" });
 
                 let x = margin;
                 ['left', 'right'].forEach(side => {
