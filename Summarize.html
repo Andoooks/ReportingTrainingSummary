@@ -10,13 +10,13 @@
 </head>
 <body class="bg-slate-50 min-h-screen">
 
-    <div id="shiftOverlay" class="fixed inset-0 bg-slate-900 flex items-center justify-center z-[100] transition-opacity duration-300">
-        <div class="bg-white p-10 rounded-3xl shadow-2xl max-w-md w-full text-center scale-in animate-in duration-300">
+    <div id="shiftOverlay" class="fixed inset-0 bg-slate-900 flex items-center justify-center z-[100]">
+        <div class="bg-white p-10 rounded-3xl shadow-2xl max-w-md w-full text-center">
             <h2 class="text-3xl font-black text-slate-800 mb-2 uppercase tracking-tight">Shift Entry</h2>
-            <p class="text-slate-500 mb-6">Enter your shift number to begin the summary.</p>
-            <input type="number" id="shiftInput" placeholder="Shift Number" 
-                   class="w-full border-2 border-slate-200 rounded-xl p-4 text-center text-3xl font-bold focus:border-blue-500 focus:outline-none mb-4 transition-all">
-            <button id="startBtn" class="w-full bg-blue-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-blue-700 transition-all shadow-lg active:scale-95">
+            <p class="text-slate-500 mb-6 font-medium">Please enter shift number (1-6) to continue.</p>
+            <input type="number" id="shiftInput" min="1" max="6" placeholder="1-6" 
+                   class="w-full border-2 border-slate-200 rounded-xl p-4 text-center text-4xl font-bold focus:border-blue-500 focus:outline-none mb-4 transition-all">
+            <button id="startBtn" class="w-full bg-blue-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-blue-700 transition shadow-lg">
                 Start Session
             </button>
         </div>
@@ -28,7 +28,7 @@
                 <h1 class="text-xl font-bold uppercase tracking-wider">Report Training Summary</h1>
                 <p id="activeShiftDisplay" class="text-blue-400 text-xs font-mono font-bold"></p>
             </div>
-            <button id="changeShiftBtn" class="text-slate-400 hover:text-white text-xs underline decoration-slate-600 underline-offset-4 ml-2">
+            <button id="changeShiftBtn" class="text-slate-400 hover:text-white text-xs underline underline-offset-4 ml-2">
                 Change Shift
             </button>
         </div>
@@ -41,9 +41,9 @@
     <main class="p-4 h-[calc(100vh-100px)]">
         <input type="file" id="csvFiles" accept=".csv" multiple class="hidden" />
         
-        <div id="dropzone" class="w-full h-full border-4 border-dashed border-slate-200 rounded-3xl flex flex-col items-center justify-center cursor-pointer hover:bg-white transition-all group">
-            <div class="bg-blue-50 p-6 rounded-full mb-4 group-hover:scale-110 transition-transform shadow-inner">
-                <svg class="w-12 h-12 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4" stroke-width="2.5" stroke-linecap="round"/></svg>
+        <div id="dropzone" class="w-full h-full border-4 border-dashed border-slate-200 rounded-3xl flex flex-col items-center justify-center cursor-pointer hover:bg-white transition group">
+            <div class="bg-blue-50 p-6 rounded-full mb-4 group-hover:scale-110 transition shadow-inner text-blue-500">
+                <svg class="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4" stroke-width="2.5" stroke-linecap="round"/></svg>
             </div>
             <p class="text-2xl font-bold text-slate-400">Upload CSVs for <span id="dropzoneShiftText">Shift</span></p>
         </div>
@@ -60,27 +60,27 @@
         let globalCycleCount = {};
         let shiftNumber = "";
 
-        // Navigation: Go back to Landing Page
+        // Reset and go to Landing Page
         document.getElementById('changeShiftBtn').onclick = () => {
-            if (confirm("Changing shifts will clear your current uploaded data. Continue?")) {
-                location.reload(); // Simplest way to reset the whole state
+            if (confirm("Reset current data and change shift?")) {
+                location.reload();
             }
         };
 
-        // Shift Initialization Logic
+        // Shift validation (1-6)
         document.getElementById('startBtn').onclick = () => {
-            const val = document.getElementById('shiftInput').value;
-            if (val) {
+            const val = parseInt(document.getElementById('shiftInput').value);
+            if (val >= 1 && val <= 6) {
                 shiftNumber = val;
                 document.getElementById('shiftOverlay').classList.add('hidden');
                 document.getElementById('activeShiftDisplay').innerText = `SHIFT ${shiftNumber} ACTIVE`;
                 document.getElementById('dropzoneShiftText').innerText = `Shift ${shiftNumber}`;
             } else {
-                alert("Please enter a valid shift number.");
+                alert("Invalid Entry. Please enter a shift number between 1 and 6.");
             }
         };
 
-        // File Management
+        // File Processing
         document.getElementById('addBtn').onclick = () => document.getElementById('csvFiles').click();
         document.getElementById('dropzone').onclick = () => document.getElementById('csvFiles').click();
 
@@ -104,11 +104,10 @@
             sessions.forEach((session, sIdx) => {
                 if (sIdx > 0) doc.addPage();
                 
-                // Maximized PDF Header
                 doc.setFillColor(31, 41, 55);
                 doc.rect(0, 0, 210, 15, 'F');
                 doc.setTextColor(255, 255, 255);
-                doc.setFontSize(10).text(`SHIFT ${shiftNumber} OPERATION REPORT | FILE: ${session.name.toUpperCase()}`, margin, 10);
+                doc.setFontSize(10).text(`SHIFT ${shiftNumber} REPORT | SOURCE: ${session.name.toUpperCase()}`, margin, 10);
 
                 let startX = margin;
                 ['left', 'right'].forEach(side => {
@@ -119,7 +118,6 @@
                     globalCycleCount[opName] = (globalCycleCount[opName] || 0) + 1;
                     const cycleNo = globalCycleCount[opName];
 
-                    // Math Calculations 
                     const startTs = sideData[0]['Timestamp (ISO)'];
                     const endTs = sideData[sideData.length-1]['Timestamp (ISO)'];
                     const durationMs = new Date(endTs) - new Date(startTs);
@@ -145,7 +143,6 @@
                             ["Total Completions", sideData.length.toString()],
                             ["Duration", fmt(durationMs)],
                             ["Rate Per Hour", rateH],
-                            ["Rate Per Day", (rateH * 24).toFixed(2)],
                             ["Mean Gap", fmt(meanG)],
                             ["Min Gap", fmt(sorted[0])],
                             ["Max Gap", fmt(sorted[sorted.length-1])]
