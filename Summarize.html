@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Report Training Summary | All Shifts</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+    <div id="shiftOverlay" class="fixed inset-0 bg-slate-900 flex items-center justify-center z-[100] transition-opacity duration-300">
+        <div class="bg-white p-10 rounded-3xl shadow-2xl max-w-md w-full text-center scale-in animate-in duration-300">
+            <h2 class="text-3xl font-black text-slate-800 mb-2 uppercase tracking-tight">Shift Entry</h2>
+            <p class="text-slate-500 mb-6">Enter your shift number to begin the summary.</p>
+            <input type="number" id="shiftInput" placeholder="Shift Number" 
+                   class="w-full border-2 border-slate-200 rounded-xl p-4 text-center text-3xl font-bold focus:border-blue-500 focus:outline-none mb-4 transition-all">
+            <button id="startBtn" class="w-full bg-blue-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-blue-700 transition-all shadow-lg active:scale-95">
+                Start Session
+            </button>
+        </div>
+    </div>
+
+    <nav class="bg-slate-900 text-white p-5 flex justify-between items-center shadow-lg sticky top-0 z-50">
+        <div class="flex items-center gap-4">
+            <div>
+                <h1 class="text-xl font-bold uppercase tracking-wider">Report Training Summary</h1>
+                <p id="activeShiftDisplay" class="text-blue-400 text-xs font-mono font-bold"></p>
+            </div>
+            <button id="changeShiftBtn" class="text-slate-400 hover:text-white text-xs underline decoration-slate-600 underline-offset-4 ml-2">
+                Change Shift
+            </button>
+        </div>
+        <div class="flex gap-4">
+            <button id="addBtn" class="bg-slate-700 hover:bg-slate-600 px-6 py-2 rounded-lg font-bold text-sm transition">ADD CSV</button>
+            <button id="dlBtn" class="hidden bg-emerald-600 hover:bg-emerald-500 px-6 py-2 rounded-lg font-bold text-sm transition shadow-md">DOWNLOAD PDF</button>
+        </div>
+    </nav>
+
+    <main class="p-4 h-[calc(100vh-100px)]">
+        <input type="file" id="csvFiles" accept=".csv" multiple class="hidden" />
+        
+        <div id="dropzone" class="w-full h-full border-4 border-dashed border-slate-200 rounded-3xl flex flex-col items-center justify-center cursor-pointer hover:bg-white transition-all group">
+            <div class="bg-blue-50 p-6 rounded-full mb-4 group-hover:scale-110 transition-transform shadow-inner">
+                <svg class="w-12 h-12 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4" stroke-width="2.5" stroke-linecap="round"/></svg>
+            </div>
+            <p class="text-2xl font-bold text-slate-400">Upload CSVs for <span id="dropzoneShiftText">Shift</span></p>
+        </div>
+
+        <div id="previewArea" class="hidden h-full">
+            <iframe id="pdfFrame" class="w-full h-full rounded-2xl border-2 border-slate-200 bg-slate-100 shadow-inner"></iframe>
+        </div>
+    </main>
+
+    <script>
+        const { jsPDF } = window.jspdf;
+        let finalBlob = null;
+        let sessions = [];
+        let globalCycleCount = {};
+        let shiftNumber = "";
+
+        // Navigation: Go back to Landing Page
+        document.getElementById('changeShiftBtn').onclick = () => {
+            if (confirm("Changing shifts will clear your current uploaded data. Continue?")) {
+                location.reload(); // Simplest way to reset the whole state
+            }
+        };
+
+        // Shift Initialization Logic
+        document.getElementById('startBtn').onclick = () => {
+            const val = document.getElementById('shiftInput').value;
+            if (val) {
+                shiftNumber = val;
+                document.getElementById('shiftOverlay').classList.add('hidden');
+                document.getElementById('activeShiftDisplay').innerText = `SHIFT ${shiftNumber} ACTIVE`;
+                document.getElementById('dropzoneShiftText').innerText = `Shift ${shiftNumber}`;
+            } else {
+                alert("Please enter a valid shift number.");
+            }
+        };
+
+        // File Management
+        document.getElementById('addBtn').onclick = () => document.getElementById('csvFiles').click();
+        document.getElementById('dropzone').onclick = () => document.getElementById('csvFiles').click();
+
+        document.getElementById('csvFiles').onchange = async (e) => {
+            const files = Array.from(e.target.files);
+            for (const file of files) {
+                const results = await new Promise(res => Papa.parse(file, {header:true, skipEmptyLines:true, complete:res}));
+                sessions.push({ name: file.name, data: results.data });
+            }
+            renderPDF();
+        };
+
+        function renderPDF() {
+            const doc = new jsPDF('p', 'mm', 'a4');
+            const pageWidth = 210;
+            const margin = 5; 
+            const colGap = 5;
+            const colWidth = (pageWidth - (margin * 2) - colGap) / 2;
+            globalCycleCount = {}; 
+
+            sessions.forEach((session, sIdx) => {
+                if (sIdx > 0) doc.addPage();
+                
+                // Maximized PDF Header
+                doc.setFillColor(31, 41, 55);
+                doc.rect(0, 0, 210, 15, 'F');
+                doc.setTextColor(255, 255, 255);
+                doc.setFontSize(10).text(`SHIFT ${shiftNumber} OPERATION REPORT | FILE: ${session.name.toUpperCase()}`, margin, 10);
+
+                let startX = margin;
+                ['left', 'right'].forEach(side => {
+                    const sideData = session.data.filter(r => String(r.Side || "").toLowerCase().trim() === side);
+                    if (sideData.length === 0) return;
+
+                    const opName = (sideData[0].Operator || "Unknown").trim();
+                    globalCycleCount[opName] = (globalCycleCount[opName] || 0) + 1;
+                    const cycleNo = globalCycleCount[opName];
+
+                    // Math Calculations 
+                    const startTs = sideData[0]['Timestamp (ISO)'];
+                    const endTs = sideData[sideData.length-1]['Timestamp (ISO)'];
+                    const durationMs = new Date(endTs) - new Date(startTs);
+                    const rateH = (sideData.length / (durationMs / 3600000)).toFixed(2);
+                    
+                    const intervals = [];
+                    for(let i=1; i<sideData.length; i++){
+                        intervals.push(new Date(sideData[i]['Timestamp (ISO)']) - new Date(sideData[i-1]['Timestamp (ISO)']));
+                    }
+                    const sorted = [...intervals].sort((a,b) => a-b);
+                    const meanG = intervals.length > 0 ? (intervals.reduce((a,b)=>a+b,0)/intervals.length) : 0;
+
+                    doc.setTextColor(17, 24, 39);
+                    doc.setFontSize(14).setFont(undefined, 'bold').text(`${side.toUpperCase()} - CYCLE ${cycleNo}`, startX, 25);
+
+                    doc.autoTable({
+                        startY: 28,
+                        margin: { left: startX },
+                        tableWidth: colWidth,
+                        body: [
+                            ["Operator", opName],
+                            ["Cycle Number", cycleNo.toString()],
+                            ["Total Completions", sideData.length.toString()],
+                            ["Duration", fmt(durationMs)],
+                            ["Rate Per Hour", rateH],
+                            ["Rate Per Day", (rateH * 24).toFixed(2)],
+                            ["Mean Gap", fmt(meanG)],
+                            ["Min Gap", fmt(sorted[0])],
+                            ["Max Gap", fmt(sorted[sorted.length-1])]
+                        ],
+                        theme: 'grid',
+                        styles: { fontSize: 10, cellPadding: 3.5 },
+                        columnStyles: { 0: { fontStyle: 'bold', fillColor: [248, 250, 252], width: 40 } }
+                    });
+                    startX += colWidth + colGap;
+                });
+            });
+
+            finalBlob = doc.output('blob');
+            document.getElementById('pdfFrame').src = URL.createObjectURL(finalBlob);
+            document.getElementById('previewArea').classList.remove('hidden');
+            document.getElementById('dropzone').classList.add('hidden');
+            document.getElementById('dlBtn').classList.remove('hidden');
+        }
+
+        function fmt(ms) {
+            if (!ms || isNaN(ms)) return "0s";
+            const s = Math.floor(ms / 1000);
+            return `${Math.floor(s/60)}m ${s%60}s`;
+        }
+
+        document.getElementById('dlBtn').onclick = () => {
+            const dateStr = new Date().toLocaleDateString('en-US', {
+                year: 'numeric', month: '2-digit', day: '2-digit'
+            }).replace(/\//g, '-');
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(finalBlob);
+            link.download = `Shift ${shiftNumber} Summary - ${dateStr}.pdf`;
+            link.click();
+        };
+    </script>
+</body>
+</html>
